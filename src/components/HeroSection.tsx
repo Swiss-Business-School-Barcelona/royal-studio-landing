@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import heroImage from '@/assets/hero-royal.jpg';
+import logo from '@/assets/logo.jpeg';
 
 const HeroSection = () => {
   const { t } = useLanguage();
@@ -20,23 +21,27 @@ const HeroSection = () => {
       {/* Content */}
       <div className="relative z-10 container-royal text-center">
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1, delay: 0.2 }}
+          className="mb-8"
         >
-          <span className="inline-block text-primary text-sm tracking-[0.3em] uppercase mb-6">
-            {t('hero.subtitle')}
-          </span>
+          <img 
+            src={logo} 
+            alt="Royal Studio" 
+            className="w-48 md:w-64 lg:w-72 mx-auto"
+          />
         </motion.div>
 
-        <motion.h1
+        <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.4 }}
-          className="font-serif text-5xl md:text-7xl lg:text-8xl text-foreground mb-8 tracking-wide"
         >
-          ROYAL STUDIO
-        </motion.h1>
+          <span className="inline-block text-primary text-sm md:text-base tracking-[0.3em] uppercase">
+            Multi Space Experience
+          </span>
+        </motion.div>
 
         <motion.p
           initial={{ opacity: 0, y: 30 }}
