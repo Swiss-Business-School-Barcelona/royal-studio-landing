@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Menu, X, Crown } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LanguageSelector from './LanguageSelector';
 import { useLanguage } from '@/contexts/LanguageContext';
+import logo from '@/assets/logo.jpeg';
 
 const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -38,15 +39,11 @@ const Header = () => {
         <div className="flex items-center justify-between h-20 md:h-24">
           {/* Logo */}
           <a href="#" className="flex items-center gap-2 group">
-            <Crown className="w-6 h-6 text-primary transition-transform duration-300 group-hover:scale-110" />
-            <div className="flex flex-col">
-              <span className="font-serif text-lg md:text-xl tracking-wider text-foreground">
-                ROYAL STUDIO
-              </span>
-              <span className="text-[10px] tracking-[0.2em] text-muted-foreground uppercase">
-                Multi Space Experience
-              </span>
-            </div>
+            <img 
+              src={logo} 
+              alt="Royal Studio" 
+              className="h-14 md:h-16 w-auto transition-transform duration-300 group-hover:scale-105"
+            />
           </a>
 
           {/* Desktop Navigation */}

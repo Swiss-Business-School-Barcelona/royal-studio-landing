@@ -40,8 +40,8 @@ const LocationSection = () => {
                   {t('location.address')}
                 </h3>
                 <p className="text-muted-foreground">
-                  Calle Gran Vía, 42<br />
-                  28013 Madrid, España
+                  Carrer de la Indústria, 153<br />
+                  Eixample, 08025 Barcelona
                 </p>
               </div>
             </div>
@@ -85,7 +85,7 @@ const LocationSection = () => {
             className="h-[400px] lg:h-full min-h-[400px] bg-muted"
           >
             <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3037.4234928696346!2d-3.7037974!3d40.4197806!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0xd42287d8b0e8f69%3A0x8a8b8b8b8b8b8b8b!2sGran%20V%C3%ADa%2C%20Madrid!5e0!3m2!1ses!2ses!4v1629876543210!5m2!1ses!2ses"
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2992.5899089584686!2d2.1651!3d41.4074!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x12a4a2f5a5f5a5a5%3A0x5a5a5a5a5a5a5a5a!2sCarrer%20de%20la%20Ind%C3%BAstria%2C%20153%2C%20Eixample%2C%2008025%20Barcelona!5e0!3m2!1ses!2ses!4v1629876543210!5m2!1ses!2ses"
               width="100%"
               height="100%"
               style={{ border: 0, filter: 'grayscale(100%) contrast(1.1)' }}

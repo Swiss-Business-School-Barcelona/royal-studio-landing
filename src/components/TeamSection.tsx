@@ -2,9 +2,8 @@ import { motion } from 'framer-motion';
 import { useInView } from 'framer-motion';
 import { useRef } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
-import teamMember1 from '@/assets/team-member-1.jpg';
-import teamMember2 from '@/assets/team-member-2.jpg';
-import teamMember3 from '@/assets/team-member-3.jpg';
+import barberMarcelo from '@/assets/barber-marcelo.png';
+import barberSahil from '@/assets/team-member-2.jpg';
 
 const TeamSection = () => {
   const { t } = useLanguage();
@@ -13,19 +12,14 @@ const TeamSection = () => {
 
   const team = [
     {
-      name: 'Carlos Mendoza',
-      role: 'Master Barber & Founder',
-      image: teamMember1,
+      name: 'Marcelo',
+      role: 'Barber 1',
+      image: barberMarcelo,
     },
     {
-      name: 'David Ruiz',
-      role: 'Senior Barber',
-      image: teamMember2,
-    },
-    {
-      name: 'Elena Vega',
-      role: 'Hair Stylist',
-      image: teamMember3,
+      name: 'Sahil',
+      role: 'Barber 2',
+      image: barberSahil,
     },
   ];
 
@@ -46,7 +40,7 @@ const TeamSection = () => {
           </h2>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 max-w-4xl mx-auto">
           {team.map((member, index) => (
             <motion.div
               key={member.name}
