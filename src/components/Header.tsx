@@ -38,13 +38,6 @@ const Header = () => {
       <div className="container-royal">
         <div className="flex items-center justify-between h-20 md:h-24">
           {/* Logo */}
-          <a href="#" className="flex items-center gap-2 group">
-            <img 
-              src={logo} 
-              alt="Royal Studio" 
-              className="h-14 md:h-16 w-auto transition-transform duration-300 group-hover:scale-105"
-            />
-          </a>
 
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center gap-8">

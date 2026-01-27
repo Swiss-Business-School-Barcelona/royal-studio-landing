@@ -29,7 +29,7 @@ const HeroSection = () => {
           <img 
             src={logo} 
             alt="Royal Studio" 
-            className="w-48 md:w-64 lg:w-72 mx-auto"
+            className="w-48 md:w-64 lg:w-40 mx-auto opacity-60"
           />
         </motion.div>
 
