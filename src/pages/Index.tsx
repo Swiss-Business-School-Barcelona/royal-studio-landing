@@ -1,13 +1,43 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { LanguageProvider } from '@/contexts/LanguageContext';
+import Header from '@/components/Header';
+import HeroSection from '@/components/HeroSection';
+import AboutSection from '@/components/AboutSection';
+import DifferenceSection from '@/components/DifferenceSection';
+import RelaxZoneSection from '@/components/RelaxZoneSection';
+import CoffeeSection from '@/components/CoffeeSection';
+import ServicesSection from '@/components/ServicesSection';
+import ClubSection from '@/components/ClubSection';
+import TeamSection from '@/components/TeamSection';
+import TestimonialsSection from '@/components/TestimonialsSection';
+import LocationSection from '@/components/LocationSection';
+import ClosingSection from '@/components/ClosingSection';
+import Footer from '@/components/Footer';
+import WhatsAppButton from '@/components/WhatsAppButton';
+import FixedBookButton from '@/components/FixedBookButton';
 
 const Index = () => {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <LanguageProvider>
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main>
+          <HeroSection />
+          <AboutSection />
+          <DifferenceSection />
+          <RelaxZoneSection />
+          <CoffeeSection />
+          <ServicesSection />
+          <ClubSection />
+          <TeamSection />
+          <TestimonialsSection />
+          <LocationSection />
+          <ClosingSection />
+        </main>
+        <Footer />
+        <WhatsAppButton />
+        <FixedBookButton />
       </div>
-    </div>
+    </LanguageProvider>
   );
 };
 
