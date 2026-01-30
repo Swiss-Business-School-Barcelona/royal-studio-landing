@@ -1,12 +1,15 @@
 import { motion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
+import { useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import heroImage from '@/assets/hero-royal.jpg';
 import logo from '@/assets/logo.png';
 import logoInfo from '@/assets/logo_info.png';
+import BookingModal from './BookingModal';
 
 const HeroSection = () => {
   const { t } = useLanguage();
+  const [isBookingOpen, setIsBookingOpen] = useState(false);
 
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
@@ -64,12 +67,12 @@ const HeroSection = () => {
           transition={{ duration: 1, delay: 0.8 }}
           className="flex flex-col sm:flex-row items-center justify-center gap-4"
         >
-          <a
-            href="#"
+          <button
+            onClick={() => setIsBookingOpen(true)}
             className="inline-flex items-center justify-center px-8 py-4 bg-primary text-primary-foreground font-sans text-sm tracking-[0.15em] uppercase transition-all duration-300 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20 min-w-[200px]"
           >
             {t('hero.cta')}
-          </a>
+          </button>
           <a
             href="#about"
             className="inline-flex items-center justify-center px-8 py-4 border border-foreground/30 text-foreground font-sans text-sm tracking-[0.15em] uppercase transition-all duration-300 hover:border-primary hover:text-primary min-w-[200px]"
@@ -94,6 +97,8 @@ const HeroSection = () => {
           <ChevronDown className="w-6 h-6" />
         </motion.div>
       </motion.div>
+
+      <BookingModal isOpen={isBookingOpen} onClose={() => setIsBookingOpen(false)} />
     </section>
   );
 };

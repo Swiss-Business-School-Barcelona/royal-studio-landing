@@ -4,10 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import LanguageSelector from './LanguageSelector';
 import { useLanguage } from '@/contexts/LanguageContext';
 import logo from '@/assets/logo.png';
+import BookingModal from './BookingModal';
 
 const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isBookingOpen, setIsBookingOpen] = useState(false);
   const { t } = useLanguage();
 
   useEffect(() => {
@@ -56,12 +58,12 @@ const Header = () => {
           <div className="flex items-center gap-4">
             <LanguageSelector />
             
-            <a
-              href="#"
+            <button
+              onClick={() => setIsBookingOpen(true)}
               className="hidden md:inline-flex items-center justify-center px-6 py-2.5 bg-primary text-primary-foreground font-sans text-sm tracking-wider uppercase transition-all duration-300 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20"
             >
               {t('nav.book')}
-            </a>
+            </button>
 
             {/* Mobile Menu Button */}
             <button
@@ -96,16 +98,20 @@ const Header = () => {
                   {link.label}
                 </a>
               ))}
-              <a
-                href="#"
+              <button
+                onClick={() => {
+                  setIsBookingOpen(true);
+                  setIsMobileMenuOpen(false);
+                }}
                 className="inline-flex items-center justify-center px-6 py-3 bg-primary text-primary-foreground font-sans text-sm tracking-wider uppercase mt-4"
               >
                 {t('nav.book')}
-              </a>
+              </button>
             </nav>
           </motion.div>
         )}
       </AnimatePresence>
+      <BookingModal isOpen={isBookingOpen} onClose={() => setIsBookingOpen(false)} />
     </header>
   );
 };
