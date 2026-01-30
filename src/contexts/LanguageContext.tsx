@@ -89,6 +89,9 @@ const translations: Translations = {
   'location.phone': { es: 'Teléfono', en: 'Phone' },
   'location.email': { es: 'Email', en: 'Email' },
 
+  // Booking
+  'booking.info': { es: 'Para corte + barba, reserva dos citas (1 hora). Las citas normales son de 30 min.', en: 'For haircut + beard, book two appointments (1 hour). Regular appointments are 30 min.' },
+
   // Footer
   'footer.legal': { es: 'Aviso Legal', en: 'Legal Notice' },
   'footer.privacy': { es: 'Política de Privacidad', en: 'Privacy Policy' },
