@@ -11,19 +11,19 @@ const TestimonialsSection = () => {
 
   const testimonials = [
     {
-      text: "La mejor experiencia de barbería que he tenido. No es solo un corte, es un ritual completo de relax y atención.",
-      author: "Miguel Ángel P.",
-      role: "Cliente desde 2022",
-    },
-    {
-      text: "Desde que descubrí Royal Studio, no vuelvo a ningún otro sitio. El ambiente, el café, la atención... Todo es perfecto.",
-      author: "Roberto S.",
+      text: "Muy buen peluquero , profesional, El corte siempre va bien. consistente. amistoso. buena experiencia cada vez. ¡Se lo recomiendo a todos los que quieran un buen corte!",
+      author: "Touraj Vaziri",
       role: "Miembro Club Royal",
     },
     {
-      text: "Por fin un lugar donde no te tratan como un número más. Se nota que aquí realmente les importa cada cliente.",
-      author: "Alejandro M.",
-      role: "Cliente desde 2023",
+      text: "As I write this review I am not surprised to see how highly rated Marcelo's BarberShop is. Marcelo is a fantastic personality and an equally professional barber. He takes time to understand.",
+      author: "Michael Di Franco",
+      role: "Miembro Club Royal",
+    },
+    {
+      text: "Marcelo by far was the best barber I had in Barcelona. He was doing an amazing job, very professional with great attitude. I would strongly recommend him. Until next visit. Adios.",
+      author: "Hoss Frad",
+      role: "Miembro Club Royal",
     },
   ];
 

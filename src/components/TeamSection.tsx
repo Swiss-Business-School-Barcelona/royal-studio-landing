@@ -12,15 +12,15 @@ const TeamSection = () => {
 
   const team = [
     {
-      name: 'Marcelo',
-      role: 'Barber 1',
-      image: barberMarcelo,
-    },
-    {
       name: 'Sahil',
-      role: 'Barber 2',
+      role: 'Director',
       image: barberSahil,
     },
+    {
+      name: 'Marcelo',
+      role: 'Barber',
+      image: barberMarcelo,
+    }
   ];
 
   return (

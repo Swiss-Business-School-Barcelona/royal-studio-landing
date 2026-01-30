@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { useInView } from 'framer-motion';
 import { useRef } from 'react';
-import { MapPin, Phone, Clock } from 'lucide-react';
+import { MapPin, Phone, Clock, Mail } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 const LocationSection = () => {
@@ -55,9 +55,7 @@ const LocationSection = () => {
                   {t('location.hours')}
                 </h3>
                 <p className="text-muted-foreground">
-                  Lunes - Viernes: 10:00 - 21:00<br />
-                  Sábado: 10:00 - 20:00<br />
-                  Domingo: Cerrado
+                  Lunes - Sábado: 10:00 - 20:00
                 </p>
               </div>
             </div>
@@ -72,6 +70,22 @@ const LocationSection = () => {
                 </h3>
                 <p className="text-muted-foreground">
                   +34 934 464 434
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-6">
+              <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center border border-primary/30">
+                <Mail className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg text-foreground mb-2">
+                  {t('location.email')}
+                </h3>
+                <p className="text-muted-foreground">
+                  <a href="mailto:royalstudio153@gmail.com" className="hover:text-primary transition-colors">
+                    royalstudio153@gmail.com
+                  </a>
                 </p>
               </div>
             </div>

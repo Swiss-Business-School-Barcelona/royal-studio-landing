@@ -87,6 +87,7 @@ const translations: Translations = {
   'location.address': { es: 'Dirección', en: 'Address' },
   'location.hours': { es: 'Horario', en: 'Hours' },
   'location.phone': { es: 'Teléfono', en: 'Phone' },
+  'location.email': { es: 'Email', en: 'Email' },
 
   // Footer
   'footer.legal': { es: 'Aviso Legal', en: 'Legal Notice' },
