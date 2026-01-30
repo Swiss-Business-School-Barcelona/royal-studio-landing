@@ -25,18 +25,18 @@ const HeroSection = () => {
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1, delay: 0.2 }}
-          className="mb-8 flex flex-col items-center gap-4"
+          className="mb-8 flex flex-col items-center"
         >
+<img 
+  src={logo} 
+  alt="Royal Studio" 
+  className="w-28 md:w-36 mx-auto object-contain"
+/>
           <img 
-            src={logo} 
-            alt="Royal Studio" 
-            className="w-48 md:w-64 lg:w-40 mx-auto opacity-100"
-          />
-          {/* <img 
             src={logoInfo} 
             alt="Royal Studio Info" 
-            className="w-40 md:w-56 lg:w-36 mx-auto opacity-100"
-          /> */}
+            className="w-40 md:w-80"
+          />
         </motion.div>
 
         <motion.div
