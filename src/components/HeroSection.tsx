@@ -2,7 +2,8 @@ import { motion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import heroImage from '@/assets/hero-royal.jpg';
-import logo from '@/assets/logo.jpeg';
+import logo from '@/assets/logo.png';
+import logoInfo from '@/assets/logo_info.png';
 
 const HeroSection = () => {
   const { t } = useLanguage();
@@ -24,13 +25,18 @@ const HeroSection = () => {
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1, delay: 0.2 }}
-          className="mb-8"
+          className="mb-8 flex flex-col items-center gap-4"
         >
           <img 
             src={logo} 
             alt="Royal Studio" 
-            className="w-48 md:w-64 lg:w-40 mx-auto opacity-60"
+            className="w-48 md:w-64 lg:w-40 mx-auto opacity-100"
           />
+          {/* <img 
+            src={logoInfo} 
+            alt="Royal Studio Info" 
+            className="w-40 md:w-56 lg:w-36 mx-auto opacity-100"
+          /> */}
         </motion.div>
 
         <motion.div

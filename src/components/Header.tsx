@@ -3,7 +3,7 @@ import { Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LanguageSelector from './LanguageSelector';
 import { useLanguage } from '@/contexts/LanguageContext';
-import logo from '@/assets/logo.jpeg';
+import logo from '@/assets/logo.png';
 
 const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false);

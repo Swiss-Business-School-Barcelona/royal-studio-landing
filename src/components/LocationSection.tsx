@@ -71,7 +71,7 @@ const LocationSection = () => {
                   {t('location.phone')}
                 </h3>
                 <p className="text-muted-foreground">
-                  +34 912 345 678
+                  +34 934 464 434
                 </p>
               </div>
             </div>
