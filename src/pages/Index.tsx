@@ -14,6 +14,7 @@ import ClosingSection from '@/components/ClosingSection';
 import Footer from '@/components/Footer';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import FixedBookButton from '@/components/FixedBookButton';
+import ChatbotWidget from '@/components/ChatbotWidget';
 
 const Index = () => {
   return (
@@ -36,6 +37,7 @@ const Index = () => {
         <Footer />
         <WhatsAppButton />
         <FixedBookButton />
+        <ChatbotWidget />
       </div>
     </LanguageProvider>
   );
