@@ -18,6 +18,18 @@ const ChatbotWidget = () => {
   const [isLoading, setIsLoading] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const webhookUrl = 'https://tourajis33.app.n8n.cloud/webhook/476d3983-8000-48f1-a6bc-f8d2e0e0c0aa/chat';
+  const sessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const existingSessionId = sessionStorage.getItem('chatbotSessionId');
+    if (existingSessionId) {
+      sessionIdRef.current = existingSessionId;
+    } else {
+      const newSessionId = `session_${crypto.randomUUID()}`;
+      sessionIdRef.current = newSessionId;
+      sessionStorage.setItem('chatbotSessionId', newSessionId);
+    }
+  }, []);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -48,7 +60,7 @@ const ChatbotWidget = () => {
         body: JSON.stringify({
           action: 'sendMessage',
           chatInput: text.trim(),
-          sessionId: `session_${Date.now()}`,
+          sessionId: sessionIdRef.current,
         }),
       });
 
