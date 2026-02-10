@@ -20,22 +20,35 @@ const ChatbotWidget = () => {
   const webhookUrl = 'https://tourajis33.app.n8n.cloud/webhook/476d3983-8000-48f1-a6bc-f8d2e0e0c0aa/chat';
   const sessionIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    const existingSessionId = sessionStorage.getItem('chatbotSessionId');
-    if (existingSessionId) {
-      sessionIdRef.current = existingSessionId;
-    } else {
-      const newSessionId = `session_${crypto.randomUUID()}`;
-      sessionIdRef.current = newSessionId;
-      sessionStorage.setItem('chatbotSessionId', newSessionId);
+  const generateSessionId = () => {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return `session_${crypto.randomUUID()}`;
     }
-  }, []);
+    return `session_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  };
+
+  useEffect(() => {
+    if (isOpen && !sessionIdRef.current) {
+      sessionIdRef.current = generateSessionId();
+    }
+    if (!isOpen) {
+      sessionIdRef.current = null;
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages]);
+
+  const formatBotText = (text: string) => {
+    return text
+      .replace(/\s+(\d+\))\s+/g, '\n$1 ')
+      .replace(/\s+Nota:/g, '\nNota:')
+      .replace(/\s+¿/g, '\n¿')
+      .trim();
+  };
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -52,6 +65,9 @@ const ChatbotWidget = () => {
     setIsLoading(true);
 
     try {
+      if (!sessionIdRef.current) {
+        sessionIdRef.current = generateSessionId();
+      }
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
@@ -131,7 +147,9 @@ const ChatbotWidget = () => {
                         : 'bg-gray-100 text-gray-900'
                     }`}
                   >
-                    <p className="text-sm">{message.text}</p>
+                    <p className="text-sm whitespace-pre-line">
+                      {message.sender === 'bot' ? formatBotText(message.text) : message.text}
+                    </p>
                   </div>
                 </div>
               ))}
