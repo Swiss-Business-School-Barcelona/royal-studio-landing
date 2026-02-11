@@ -69,7 +69,9 @@ const LocationSection = () => {
                   {t('location.phone')}
                 </h3>
                 <p className="text-muted-foreground">
-                  +34 934 464 434
+                  <a href="tel:+34934464434" className="hover:text-primary transition-colors">
+                    +34 934 464 434
+                  </a>
                 </p>
               </div>
             </div>
