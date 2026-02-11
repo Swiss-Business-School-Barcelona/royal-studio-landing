@@ -37,7 +37,7 @@ const Index = () => {
         <Footer />
         <WhatsAppButton />
         <FixedBookButton />
-        <ChatbotWidget />
+        {/* <ChatbotWidget /> */}
       </div>
     </LanguageProvider>
   );
