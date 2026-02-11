@@ -130,7 +130,7 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
         )}
 
         {step === 'calendar' && (
-          <div className="flex flex-col" style={{ height: '70vh' }}>
+          <div className="flex flex-col bg-white" style={{ height: '70vh' }}>
             <div className="px-5 py-2 bg-accent/30 border-b border-border">
               <p className="text-sm text-muted-foreground">
                 {services.find(s => s.id === selectedService)?.label} · {barbers.find(b => b.id === selectedBarber)?.label}
