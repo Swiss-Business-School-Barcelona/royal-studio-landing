@@ -39,10 +39,15 @@ const LocationSection = () => {
                 <h3 className="font-serif text-lg text-foreground mb-2">
                   {t('location.address')}
                 </h3>
-                <p className="text-muted-foreground">
+                <a
+                  href="https://www.google.com/maps/dir/?api=1&destination=Carrer+de+la+Ind%C3%BAstria,+153,+08025+Barcelona"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-primary transition-colors"
+                >
                   Carrer de la Indústria, 153<br />
                   Eixample, 08025 Barcelona
-                </p>
+                </a>
               </div>
             </div>
 
