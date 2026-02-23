@@ -1,5 +1,5 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ArrowLeft, Scissors, User, Clock, CalendarDays, ChevronLeft, ChevronRight, Check, AlertCircle } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import barberMarcelo from '@/assets/barber-marcelo.png';
@@ -46,9 +46,70 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
   const [note, setNote] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
   const locale = language === 'es' ? es : enUS;
   const today = startOfDay(new Date());
+
+  // Fetch and subscribe to booked slots for the selected date and barber
+  useEffect(() => {
+    if (!selectedDate || !selectedBarber) {
+      setBookedSlots([]);
+      return;
+    }
+
+    const formattedDate = format(selectedDate, 'yyyy-MM-dd');
+    const barberName = barbers.find(b => b.id === selectedBarber)?.label || '';
+
+    const fetchBookedSlots = async () => {
+      setLoadingSlots(true);
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('bookings')
+          .select('time')
+          .eq('day', formattedDate)
+          .eq('barber_name', barberName);
+
+        if (fetchError) {
+          console.error('Error fetching booked slots:', fetchError);
+          setBookedSlots([]);
+        } else {
+          const booked = data?.map(booking => booking.time) || [];
+          setBookedSlots(booked);
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        setBookedSlots([]);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+
+    fetchBookedSlots();
+
+    // Subscribe to real-time changes
+    const subscription = supabase
+      .channel(`bookings-${formattedDate}-${barberName}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bookings',
+          filter: `day=eq.${formattedDate},barber_name=eq.${barberName}`,
+        },
+        () => {
+          // Refetch booked slots when changes occur
+          fetchBookedSlots();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [selectedDate, selectedBarber]);
 
   const weekDays = useMemo(() => {
     const base = startOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
@@ -129,11 +190,21 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
 
       if (insertError) {
         console.error('Error inserting booking:', insertError);
-        setError(
-          language === 'es'
-            ? 'Hubo un error al guardar tu reserva. Por favor, intenta de nuevo.'
-            : 'There was an error saving your booking. Please try again.'
-        );
+        
+        // Check if it's a unique constraint violation (duplicate booking)
+        if (insertError.code === '23505' || insertError.message?.includes('unique')) {
+          setError(
+            language === 'es'
+              ? 'Este horario ya está reservado. Por favor, elige otro.'
+              : 'This time slot is already booked. Please choose another time.'
+          );
+        } else {
+          setError(
+            language === 'es'
+              ? 'Hubo un error al guardar tu reserva. Por favor, intenta de nuevo.'
+              : 'There was an error saving your booking. Please try again.'
+          );
+        }
         setIsLoading(false);
         return;
       }
@@ -310,16 +381,21 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   {timeSlots.map((time) => {
+                    const isBooked = bookedSlots.includes(time);
                     const selected = selectedTime === time;
                     return (
                       <button
                         key={time}
-                        onClick={() => handleTimeSelect(time)}
+                        onClick={() => !isBooked && handleTimeSelect(time)}
+                        disabled={isBooked || loadingSlots}
                         className={`py-2 px-1 rounded-md text-sm font-medium transition-all ${
-                          selected
+                          isBooked
+                            ? 'opacity-40 bg-red-500/10 border border-red-500/30 cursor-not-allowed text-muted-foreground line-through'
+                            : selected
                             ? 'bg-primary text-primary-foreground'
                             : 'border border-border hover:border-primary hover:bg-accent/50'
                         }`}
+                        title={isBooked ? (language === 'es' ? 'Ocupado' : 'Booked') : ''}
                       >
                         {time}
                       </button>
