@@ -52,7 +52,7 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
   const locale = language === 'es' ? es : enUS;
   const today = startOfDay(new Date());
 
-  // Fetch and subscribe to booked slots for the selected date and barber
+  // Fetch booked slots for the selected date and barber
   useEffect(() => {
     if (!selectedDate || !selectedBarber) {
       setBookedSlots([]);
@@ -77,6 +77,7 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
         } else {
           const booked = data?.map(booking => booking.time) || [];
           setBookedSlots(booked);
+          console.log('Booked slots for', formattedDate, barberName, ':', booked);
         }
       } catch (err) {
         console.error('Error:', err);
@@ -87,28 +88,6 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
     };
 
     fetchBookedSlots();
-
-    // Subscribe to real-time changes
-    const subscription = supabase
-      .channel(`bookings-${formattedDate}-${barberName}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'bookings',
-          filter: `day=eq.${formattedDate},barber_name=eq.${barberName}`,
-        },
-        () => {
-          // Refetch booked slots when changes occur
-          fetchBookedSlots();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, [selectedDate, selectedBarber]);
 
   const weekDays = useMemo(() => {
@@ -378,6 +357,7 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="w-4 h-4" />
                   <span>{language === 'es' ? 'Horarios disponibles' : 'Available times'}</span>
+                  {loadingSlots && <span className="text-xs text-primary">{language === 'es' ? '(cargando...)' : '(loading...)'}</span>}
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   {timeSlots.map((time) => {
@@ -391,6 +371,8 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
                         className={`py-2 px-1 rounded-md text-sm font-medium transition-all ${
                           isBooked
                             ? 'opacity-40 bg-red-500/10 border border-red-500/30 cursor-not-allowed text-muted-foreground line-through'
+                            : loadingSlots
+                            ? 'opacity-50 cursor-not-allowed'
                             : selected
                             ? 'bg-primary text-primary-foreground'
                             : 'border border-border hover:border-primary hover:bg-accent/50'
