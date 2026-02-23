@@ -1,6 +1,6 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useState, useMemo } from 'react';
-import { ArrowLeft, Scissors, User, Clock, CalendarDays, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { ArrowLeft, Scissors, User, Clock, CalendarDays, ChevronLeft, ChevronRight, Check, AlertCircle } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import barberMarcelo from '@/assets/barber-marcelo.png';
 import { format, addDays, startOfWeek, isSameDay, isAfter, startOfDay, getDay, addWeeks } from 'date-fns';
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { supabase } from '@/lib/supabase';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -43,6 +44,8 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [note, setNote] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const locale = language === 'es' ? es : enUS;
   const today = startOfDay(new Date());
@@ -68,6 +71,7 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
       setName('');
       setPhone('');
       setNote('');
+      setError(null);
     }, 300);
   };
 
@@ -101,8 +105,50 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
     if (selectedDate && selectedTime) setStep('details');
   };
 
-  const handleSubmit = () => {
-    if (name.trim() && phone.trim()) setStep('confirmation');
+  const handleSubmit = async () => {
+    if (!name.trim() || !phone.trim()) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Get barber name from selected barber ID
+      const barberName = barbers.find(b => b.id === selectedBarber)?.label || '';
+
+      // Insert booking into Supabase
+      const { error: insertError } = await supabase.from('bookings').insert([
+        {
+          client_name: name.trim(),
+          barber_name: barberName,
+          day: format(selectedDate!, 'yyyy-MM-dd'), // Format date as YYYY-MM-DD for DATE type
+          time: selectedTime, // TIME type in SQL
+          phone_number: phone.trim(),
+          notes: note.trim() || null,
+        },
+      ]);
+
+      if (insertError) {
+        console.error('Error inserting booking:', insertError);
+        setError(
+          language === 'es'
+            ? 'Hubo un error al guardar tu reserva. Por favor, intenta de nuevo.'
+            : 'There was an error saving your booking. Please try again.'
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      setStep('confirmation');
+    } catch (err) {
+      console.error('Error:', err);
+      setError(
+        language === 'es'
+          ? 'Hubo un error inesperado. Por favor, intenta de nuevo.'
+          : 'An unexpected error occurred. Please try again.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const isPastDay = (date: Date) => {
@@ -307,6 +353,14 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
               </div>
             </div>
 
+            {/* Error message */}
+            {error && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            )}
+
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="booking-name">{language === 'es' ? 'Nombre' : 'Name'} *</Label>
@@ -316,6 +370,7 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
                   onChange={(e) => setName(e.target.value)}
                   placeholder={language === 'es' ? 'Tu nombre completo' : 'Your full name'}
                   maxLength={100}
+                  disabled={isLoading}
                 />
               </div>
               <div className="space-y-1.5">
@@ -327,6 +382,7 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+34 600 000 000"
                   maxLength={20}
+                  disabled={isLoading}
                 />
               </div>
               <div className="space-y-1.5">
@@ -338,16 +394,19 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
                   placeholder={language === 'es' ? 'Algo especial para tu cita...' : 'Anything special for your appointment...'}
                   rows={3}
                   maxLength={500}
+                  disabled={isLoading}
                 />
               </div>
             </div>
 
             <Button
               onClick={handleSubmit}
-              disabled={!name.trim() || !phone.trim()}
+              disabled={!name.trim() || !phone.trim() || isLoading}
               className="w-full"
             >
-              {language === 'es' ? 'Confirmar reserva' : 'Confirm booking'}
+              {isLoading
+                ? (language === 'es' ? 'Guardando...' : 'Saving...')
+                : (language === 'es' ? 'Confirmar reserva' : 'Confirm booking')}
             </Button>
           </div>
         )}

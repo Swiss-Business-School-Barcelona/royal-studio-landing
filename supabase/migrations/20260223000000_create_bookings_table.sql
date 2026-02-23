@@ -5,6 +5,8 @@ CREATE TABLE public.bookings (
   barber_name TEXT NOT NULL,
   day DATE NOT NULL,
   time TIME NOT NULL,
+  phone_number TEXT NOT NULL,
+  notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
