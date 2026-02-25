@@ -3,6 +3,7 @@ import { MessageCircle, X, Send, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { supabase } from '@/lib/supabase';
 
 interface Message {
   id: string;
@@ -17,8 +18,8 @@ const ChatbotWidget = () => {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const webhookUrl = 'https://tourajis33.app.n8n.cloud/webhook/476d3983-8000-48f1-a6bc-f8d2e0e0c0aa/chat';
   const sessionIdRef = useRef<string | null>(null);
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 
   const generateSessionId = () => {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -30,9 +31,18 @@ const ChatbotWidget = () => {
   useEffect(() => {
     if (isOpen && !sessionIdRef.current) {
       sessionIdRef.current = generateSessionId();
+      // Add initial greeting
+      const greetingMessage: Message = {
+        id: Date.now().toString(),
+        text: '¡Hola! Welcome to Royal Studio. How can I help you today? (Habla español o English)',
+        sender: 'bot',
+        timestamp: new Date(),
+      };
+      setMessages([greetingMessage]);
     }
     if (!isOpen) {
       sessionIdRef.current = null;
+      setMessages([]);
     }
   }, [isOpen]);
 
@@ -68,23 +78,41 @@ const ChatbotWidget = () => {
       if (!sessionIdRef.current) {
         sessionIdRef.current = generateSessionId();
       }
-      const response = await fetch(webhookUrl, {
+
+      // Convert messages to format expected by edge function
+      const conversationMessages = messages
+        .filter(m => m.sender === 'user' || m.sender === 'bot')
+        .map(m => ({
+          role: m.sender === 'user' ? 'user' : 'assistant',
+          content: m.text,
+        }));
+
+      // Add the new user message
+      conversationMessages.push({
+        role: 'user',
+        content: text.trim(),
+      });
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/chatbot`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'sendMessage',
-          chatInput: text.trim(),
+          messages: conversationMessages,
           sessionId: sessionIdRef.current,
         }),
       });
 
       const data = await response.json();
-      
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to get response');
+      }
+
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: data.output || data.message || 'Sorry, I could not process your request.',
+        text: data.message || 'Sorry, I could not process your request.',
         sender: 'bot',
         timestamp: new Date(),
       };
@@ -94,7 +122,7 @@ const ChatbotWidget = () => {
       console.error('Error sending message:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Sorry, there was an error connecting to the chat service.',
+        text: 'Sorry, there was an error. Please try again.',
         sender: 'bot',
         timestamp: new Date(),
       };
@@ -131,7 +159,7 @@ const ChatbotWidget = () => {
           <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
             {messages.length === 0 && (
               <div className="text-center text-gray-500 mt-8">
-                <p>¡Hola! ¿Cómo puedo ayudarte hoy?</p>
+                <p>¡Hola! Welcome to Royal Studio Chat</p>
               </div>
             )}
             <div className="space-y-4">
