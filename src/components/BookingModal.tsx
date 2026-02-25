@@ -71,6 +71,7 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
   const [note, setNote] = useState('');
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const locale = language === 'es' ? es : enUS;
   const today = startOfDay(new Date());
@@ -175,8 +176,36 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
     if (selectedDate && selectedTime) setStep('details');
   };
 
-  const handleSubmit = () => {
-    if (name.trim() && phone.trim()) setStep('confirmation');
+
+  const handleSubmit = async () => {
+    if (!name.trim() || !phone.trim() || !selectedDate || !selectedTime || !selectedBarber) return;
+
+    const barberName = barbers.find(b => b.id === selectedBarber)?.label;
+    if (!barberName) return;
+
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.from('bookings').insert({
+        client_name: name.trim(),
+        barber_name: barberName,
+        day: format(selectedDate, 'yyyy-MM-dd'),
+        time: selectedTime + ':00',
+        phone_number: phone.trim(),
+        notes: note.trim() || null,
+      });
+
+      if (error) {
+        console.error('Error inserting booking:', error);
+        alert(language === 'es' ? 'Error al guardar la reserva. Intenta de nuevo.' : 'Error saving booking. Please try again.');
+      } else {
+        setStep('confirmation');
+      }
+    } catch (err) {
+      console.error('Error:', err);
+      alert(language === 'es' ? 'Error inesperado.' : 'Unexpected error.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const isPastDay = (date: Date) => {
@@ -425,10 +454,12 @@ const BookingModal = ({ isOpen, onClose }: BookingModalProps) => {
 
             <Button
               onClick={handleSubmit}
-              disabled={!name.trim() || !phone.trim()}
+              disabled={!name.trim() || !phone.trim() || submitting}
               className="w-full"
             >
-              {language === 'es' ? 'Confirmar reserva' : 'Confirm booking'}
+              {submitting
+                ? (language === 'es' ? 'Guardando...' : 'Saving...')
+                : (language === 'es' ? 'Confirmar reserva' : 'Confirm booking')}
             </Button>
           </div>
         )}
