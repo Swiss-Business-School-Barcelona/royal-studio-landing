@@ -5,10 +5,65 @@ const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-console.log("Environment variables check:");
-console.log("- SUPABASE_URL:", supabaseUrl ? "✓" : "✗");
-console.log("- SUPABASE_SERVICE_ROLE_KEY:", supabaseServiceKey ? "✓" : "✗");
-console.log("- OPENAI_API_KEY:", openaiApiKey ? "✓" : "✗");
+console.log("[chatbot][boot] Environment variables check", {
+  hasSupabaseUrl: !!supabaseUrl,
+  hasSupabaseServiceKey: !!supabaseServiceKey,
+  hasOpenAiApiKey: !!openaiApiKey,
+});
+
+type LogLevel = "INFO" | "WARN" | "ERROR";
+
+const BASE_CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-requested-with",
+  "Access-Control-Max-Age": "86400",
+};
+
+function withCorsHeaders(headers: Record<string, string> = {}): Record<string, string> {
+  return {
+    ...BASE_CORS_HEADERS,
+    ...headers,
+  };
+}
+
+function createLogger(requestId: string, sessionId?: string) {
+  return (level: LogLevel, step: string, message: string, meta?: Record<string, unknown>) => {
+    const payload = {
+      ts: new Date().toISOString(),
+      level,
+      requestId,
+      sessionId: sessionId || "unknown",
+      step,
+      message,
+      ...(meta ? { meta } : {}),
+    };
+
+    if (level === "ERROR") {
+      console.error("[chatbot]", JSON.stringify(payload));
+    } else if (level === "WARN") {
+      console.warn("[chatbot]", JSON.stringify(payload));
+    } else {
+      console.log("[chatbot]", JSON.stringify(payload));
+    }
+  };
+}
+
+function serializeError(error: unknown): Record<string, unknown> {
+  if (error && typeof error === "object") {
+    const e = error as Record<string, unknown>;
+    return {
+      name: e.name,
+      message: e.message,
+      code: e.code,
+      details: e.details,
+      hint: e.hint,
+      stack: e.stack,
+    };
+  }
+
+  return { message: String(error) };
+}
 
 interface BookingData {
   client_name?: string;
@@ -37,9 +92,16 @@ async function findAvailableSlots(
   supabase: any,
   barberName: string,
   requestedDate: string,
-  requestedTime: string
+  requestedTime: string,
+  log?: ReturnType<typeof createLogger>
 ): Promise<{ slot: string; date: string } | null> {
   try {
+    log?.("INFO", "availability.exact_check", "Checking exact requested slot", {
+      barberName,
+      requestedDate,
+      requestedTime,
+    });
+
     // Try the exact requested time first
     const { data: exactBooking } = await supabase
       .from("bookings")
@@ -49,6 +111,10 @@ async function findAvailableSlots(
       .eq("time", requestedTime);
 
     if (!exactBooking || exactBooking.length === 0) {
+      log?.("INFO", "availability.exact_check", "Exact slot is available", {
+        slot: requestedTime,
+        date: requestedDate,
+      });
       return { slot: requestedTime, date: requestedDate };
     }
 
@@ -77,7 +143,10 @@ async function findAvailableSlots(
         .eq("time", time);
 
       if (!booking || booking.length === 0) {
-        console.log(`Found available slot: ${time} on ${requestedDate}`);
+        log?.("INFO", "availability.nearby_check", "Found closest available slot on same day", {
+          slot: time,
+          date: requestedDate,
+        });
         return { slot: time, date: requestedDate };
       }
     }
@@ -100,36 +169,69 @@ async function findAvailableSlots(
       .eq("time", requestedTime);
 
     if (!nextDayBooking || nextDayBooking.length === 0) {
-      console.log(`Found available slot: ${requestedTime} on ${nextDateStr} (next day)`);
+      log?.("INFO", "availability.next_day_check", "Found available slot on next day", {
+        slot: requestedTime,
+        date: nextDateStr,
+      });
       return { slot: requestedTime, date: nextDateStr };
     }
 
+    log?.("WARN", "availability.result", "No available slot found", {
+      barberName,
+      requestedDate,
+      requestedTime,
+    });
     return null;
   } catch (error) {
-    console.error("Error finding available slots:", error);
+    log?.("ERROR", "availability.error", "Error while checking available slots", {
+      error: serializeError(error),
+    });
     return null;
   }
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
+  const requestId = crypto.randomUUID();
+  const requestLogger = createLogger(requestId);
+
+  requestLogger("INFO", "request.received", "Incoming request received", {
+    method: req.method,
+    url: req.url,
+  });
+
   // CORS headers
   if (req.method === "OPTIONS") {
+    requestLogger("INFO", "request.cors_preflight", "Handled CORS preflight request");
+
+    const requestedHeaders = req.headers.get("access-control-request-headers");
+
     return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
+      headers: withCorsHeaders(
+        requestedHeaders
+          ? { "Access-Control-Allow-Headers": requestedHeaders }
+          : {}
+      ),
     });
   }
 
   try {
+    requestLogger("INFO", "request.parse_body", "Parsing request body");
     const { messages, sessionId } = await req.json();
+    const log = createLogger(requestId, sessionId);
+
+    log("INFO", "request.validating", "Validating request payload", {
+      hasMessages: Array.isArray(messages),
+      messageCount: Array.isArray(messages) ? messages.length : 0,
+    });
 
     if (!messages || !Array.isArray(messages)) {
+      log("WARN", "request.invalid_payload", "Invalid messages format in request body");
       return new Response(
         JSON.stringify({ error: "Invalid messages format" }),
-        { status: 400 }
+        {
+          status: 400,
+          headers: withCorsHeaders({ "Content-Type": "application/json" }),
+        }
       );
     }
 
@@ -137,67 +239,124 @@ serve(async (req) => {
     const today = new Date().toISOString().split('T')[0];
     
     // System prompt for the chatbot - optimized for reservation process
-    const systemPrompt = `You are a professional booking assistant for Royal Studio, a high-end barber shop. Your goal is to guide customers through a smooth reservation process.
+    const systemPrompt = `You are the reservation assistant for Royal Studio, a premium barber shop.
 
-## Current Context
-**Today's Date:** ${today}
+Your job is to help customers book an appointment with Marcelo quickly and naturally, like a short phone call.
 
-## Booking Information
+Keep responses short, friendly, and conversational.
 
-**Available Services:**
+Today's date: ${today}
+
+Barber:
+Marcelo
+
+Services:
 - Haircut & Styling
 - Beard Trim
 - Complete Grooming
 - Specialty Cuts
 
-**Available Barber:**
-- Marcelo (experienced professional)
+Opening Hours:
+Monday–Saturday: 10:00 – 19:30
+Closed Sunday
+Appointments every 30 minutes.
 
-**Operating Hours:**
-- Monday to Saturday: 10:00 AM - 7:30 PM
-- Closed Sundays
-- Time slots available every 30 minutes
+---
 
-## Reservation Process - Follow These Steps:
+# Conversation Rules
 
-1. **Greet & Offer Help**: Welcome the customer and ask what service they'd like
-2. **Collect Information** (in this exact order):
-   - Client's full name
-   - Preferred date (must be Monday-Saturday, format: YYYY-MM-DD)
-   - Preferred time (format: HH:MM, e.g., 14:00)
-   - Phone number (must include country code, e.g., +34600000000)
-   - Special notes (optional - haircut style preferences, concerns, etc.)
-3. **Confirm Details**: Summarize all booking details
-4. **Request Confirmation**: Ask the customer to confirm if everything is correct
+1. Extract information from the user message whenever possible.
 
-## Important Guidelines:
+Users may provide multiple details in one message. Detect and store:
+- name
+- date
+- time
+- phone number
+- service (optional)
 
-- Always be professional, friendly, and helpful
-- Ask for one piece of information at a time in a conversational manner
-- When asking for a date, suggest upcoming available weekdays
-- Suggest time slots clearly: "Available times are: 10:00, 10:30, 11:00... up to 19:30"
-- Validate phone numbers - they should include country code
-- Respond in the same language the customer uses (Spanish or English)
-- Never assume information - always ask and confirm
-- Be transparent about the process
+2. Only ask for information that is missing.
 
-## Confirmation Format:
+Required booking information:
+- name
+- date
+- time
+- phone number
 
-When the customer confirms ALL details are correct, respond with this EXACT format on a new line at the very end:
+3. Natural conversation flow:
 
-RESERVATION_CONFIRMED: John Doe|Marcelo|2026-02-25|14:00|+34600000000|No special requests
+Example flow:
+User: "Hi"
+Assistant: Greeting + ask how you can help.
 
-Format: RESERVATION_CONFIRMED: client_name|barber_name|date(YYYY-MM-DD)|time(HH:MM)|phone_number|notes
+User: "I want a haircut with Marcelo tomorrow at 15:00"
+Assistant: Ask only for the missing info (name).
 
-Requirements:
-- client_name: Full name, no special characters
-- barber_name: "Marcelo"
-- date: YYYY-MM-DD format, Monday-Saturday only
-- time: HH:MM format (24-hour clock)
-- phone_number: Full international format with country code
-- notes: Any special requests or "No special requests"
+User: "John"
+Assistant: Check availability for the requested time.
 
-Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly confirms they want to book.`;
+4. Availability check behavior
+
+When the requested time is available:
+Ask for the phone number before confirming.
+
+Example:
+"Great, that slot is available. Could I get your phone number to confirm the booking?"
+
+When the requested time is NOT available:
+Suggest 3 nearby times.
+
+Example:
+"Marcelo is booked at 15:00, but these times are available:
+14:30
+15:30
+16:00
+Would any of these work?"
+
+If the user rejects suggestions:
+Ask for another preferred time or day.
+
+5. Phone number
+
+Example:
+600111222
+
+6. Confirmation
+
+Before finalizing, briefly confirm:
+
+Example:
+"Perfect. Here's your booking:
+Name: John Doe
+Barber: Marcelo
+Date: 2026-03-12
+Time: 15:30
+Phone: 600111222
+
+Does everything look correct?"
+
+7. Final output
+
+Only after the user clearly confirms the reservation, output this line at the very end:
+
+RESERVATION_CONFIRMED: client_name|Marcelo|date|time|phone|notes
+
+Example:
+RESERVATION_CONFIRMED: John Doe|Marcelo|2026-03-12|15:30|600111222|No special requests
+
+Rules:
+- Do not output the confirmation marker until the user explicitly confirms.
+- Keep responses concise.
+- Always respond in the user's language (Spanish or English).
+
+Date Rules:
+- Accept both absolute (YYYY-MM-DD) and relative dates (e.g., "tomorrow", "this Friday", "next Monday").
+- Always resolve relative dates to the **next calendar date that matches the day** and falls within operating days (Monday–Saturday).
+- Never schedule on Sunday (closed).
+- Example:
+    - Today is Monday, 2026-03-09
+    - "this Friday" → 2026-03-13
+    - "next Monday" → 2026-03-16
+- If the resolved date is invalid or on a Sunday, choose the **next valid weekday**.`;
 
     // Build the conversation for OpenAI
     const conversationMessages: Message[] = [
@@ -205,6 +364,11 @@ Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly c
     ];
 
     // Call OpenAI API
+    log("INFO", "openai.request.start", "Sending request to OpenAI", {
+      model: "gpt-4o-mini",
+      promptMessageCount: conversationMessages.length + 1,
+    });
+
     const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -225,42 +389,55 @@ Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly c
     const openaiData = await openaiResponse.json();
 
     if (!openaiResponse.ok) {
-      console.error("OpenAI error:", openaiData);
+      log("ERROR", "openai.request.failed", "OpenAI returned non-OK response", {
+        status: openaiResponse.status,
+        statusText: openaiResponse.statusText,
+        openaiError: openaiData,
+      });
       return new Response(
         JSON.stringify({ error: "Failed to get response from OpenAI" }),
-        { status: 500 }
+        {
+          status: 500,
+          headers: withCorsHeaders({ "Content-Type": "application/json" }),
+        }
       );
     }
 
     let assistantMessage = openaiData.choices[0].message.content;
 
-    console.log("Assistant message received:");
-    console.log(assistantMessage);
-    console.log("---");
+    log("INFO", "openai.response.received", "Assistant message received", {
+      messageLength: typeof assistantMessage === "string" ? assistantMessage.length : 0,
+    });
 
     // Check if reservation should be confirmed
     if (assistantMessage.includes("RESERVATION_CONFIRMED:")) {
-      console.log("Reservation confirmation found in message");
+      log("INFO", "reservation.marker_detected", "Reservation confirmation marker detected");
       
       const reservationMatch = assistantMessage.match(
         /RESERVATION_CONFIRMED:\s*(.+?)\|(.+?)\|(.+?)\|(.+?)\|(.+?)\|(.*)$/m
       );
 
-      console.log("Regex match result:", reservationMatch);
+      log("INFO", "reservation.parsing", "Parsed reservation marker", {
+        parseSucceeded: !!reservationMatch,
+      });
 
       if (reservationMatch) {
         const [, clientName, barberName, day, time, phoneNumber, notes] = reservationMatch;
-        
-        console.log("Reservation details extracted:");
-        console.log("- Client:", clientName.trim());
-        console.log("- Barber:", barberName.trim());
-        console.log("- Day:", day.trim());
-        console.log("- Time:", time.trim());
-        console.log("- Phone:", phoneNumber.trim());
-        console.log("- Notes:", notes.trim());
+
+        log("INFO", "reservation.details_extracted", "Reservation details extracted successfully", {
+          clientName: clientName.trim(),
+          barberName: barberName.trim(),
+          day: day.trim(),
+          time: time.trim(),
+          hasPhoneNumber: !!phoneNumber.trim(),
+          hasNotes: !!notes.trim(),
+        });
 
         if (!supabaseUrl || !supabaseServiceKey) {
-          console.error("Missing Supabase environment variables");
+          log("ERROR", "supabase.config_missing", "Missing required Supabase environment variables", {
+            hasSupabaseUrl: !!supabaseUrl,
+            hasSupabaseServiceKey: !!supabaseServiceKey,
+          });
           // Remove the confirmation marker before returning
           assistantMessage = assistantMessage
             .split("RESERVATION_CONFIRMED:")[0]
@@ -269,16 +446,20 @@ Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly c
             JSON.stringify({
               message: (assistantMessage || "System error: Database configuration missing. Please contact support."),
             }),
-            { status: 200, headers: { "Access-Control-Allow-Origin": "*" } }
+            {
+              status: 200,
+              headers: withCorsHeaders({ "Content-Type": "application/json" }),
+            }
           );
         }
 
         // Initialize Supabase client with service role key
+        log("INFO", "supabase.client_init", "Initializing Supabase client");
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         try {
           // Find available slot (exact time or alternatives)
-          console.log("Checking availability for:", {
+          log("INFO", "availability.start", "Checking slot availability", {
             barber: barberName.trim(),
             date: day.trim(),
             time: time.trim(),
@@ -288,11 +469,12 @@ Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly c
             supabase,
             barberName.trim(),
             day.trim(),
-            time.trim()
+            time.trim(),
+            log
           );
 
           if (!availableSlot) {
-            console.log("No available slots found");
+            log("WARN", "availability.none", "No available slots found");
             assistantMessage = assistantMessage
               .split("RESERVATION_CONFIRMED:")[0]
               .trim();
@@ -300,7 +482,10 @@ Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly c
               JSON.stringify({
                 message: assistantMessage || `Unfortunately, there are no available slots with ${barberName.trim()} around that time. Would you like to try a different date or time?`,
               }),
-              { status: 200, headers: { "Access-Control-Allow-Origin": "*" } }
+              {
+                status: 200,
+                headers: withCorsHeaders({ "Content-Type": "application/json" }),
+              }
             );
           }
 
@@ -310,7 +495,7 @@ Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly c
             availableSlot.date !== day.trim();
 
           // Insert booking
-          console.log("Inserting reservation for:", {
+          log("INFO", "booking.insert.start", "Inserting booking into database", {
             date: availableSlot.date,
             time: availableSlot.slot,
           });
@@ -327,9 +512,9 @@ Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly c
           ]);
 
           if (insertError) {
-            console.error("Error inserting booking:", insertError);
-            console.error("Error code:", insertError.code);
-            console.error("Error message:", insertError.message);
+            log("ERROR", "booking.insert.failed", "Failed to insert booking", {
+              error: serializeError(insertError),
+            });
 
             assistantMessage = assistantMessage
               .split("RESERVATION_CONFIRMED:")[0]
@@ -344,18 +529,27 @@ Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly c
                 JSON.stringify({
                   message: assistantMessage || `That time slot is no longer available. Would you like to choose a different time?`,
                 }),
-                { status: 200, headers: { "Access-Control-Allow-Origin": "*" } }
+                {
+                  status: 200,
+                  headers: withCorsHeaders({ "Content-Type": "application/json" }),
+                }
               );
             }
             return new Response(
               JSON.stringify({
                 message: assistantMessage || "I encountered an error while saving your reservation. Please try again.",
               }),
-              { status: 200, headers: { "Access-Control-Allow-Origin": "*" } }
+              {
+                status: 200,
+                headers: withCorsHeaders({ "Content-Type": "application/json" }),
+              }
             );
           }
 
-          console.log("Reservation successfully inserted:", insertData);
+          log("INFO", "booking.insert.success", "Reservation inserted successfully", {
+            insertCount: Array.isArray(insertData) ? insertData.length : 0,
+            usedAlternativeSlot: slotsAreDifferent,
+          });
 
           // Remove the confirmation marker and return clean message
           let cleanMessage = assistantMessage
@@ -380,14 +574,13 @@ Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly c
               },
             }),
             {
-              headers: {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*",
-              },
+              headers: withCorsHeaders({ "Content-Type": "application/json" }),
             }
           );
         } catch (dbError) {
-          console.error("Database error:", dbError);
+          log("ERROR", "booking.database_exception", "Unhandled database exception while processing reservation", {
+            error: serializeError(dbError),
+          });
           assistantMessage = assistantMessage
             .split("RESERVATION_CONFIRMED:")[0]
             .trim();
@@ -395,7 +588,10 @@ Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly c
             JSON.stringify({
               message: assistantMessage || "An error occurred while processing your reservation. Please try again.",
             }),
-            { status: 200, headers: { "Access-Control-Allow-Origin": "*" } }
+            {
+              status: 200,
+              headers: withCorsHeaders({ "Content-Type": "application/json" }),
+            }
           );
         }
       }
@@ -404,17 +600,23 @@ Do NOT include the RESERVATION_CONFIRMED marker unless the customer explicitly c
     return new Response(
       JSON.stringify({ message: assistantMessage }),
       {
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
+        headers: withCorsHeaders({ "Content-Type": "application/json" }),
       }
     );
   } catch (error) {
-    console.error("Error:", error);
+    requestLogger("ERROR", "request.unhandled_exception", "Unhandled exception in chatbot function", {
+      error: serializeError(error),
+    });
+
+    const errorMessage =
+      error instanceof Error ? error.message : "An error occurred";
+
     return new Response(
-      JSON.stringify({ error: error.message || "An error occurred" }),
-      { status: 500 }
+      JSON.stringify({ error: errorMessage }),
+      {
+        status: 500,
+        headers: withCorsHeaders({ "Content-Type": "application/json" }),
+      }
     );
   }
 });

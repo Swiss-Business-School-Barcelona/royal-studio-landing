@@ -11,6 +11,13 @@ interface Message {
   timestamp: Date;
 }
 
+interface EdgeMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+type ClientLogLevel = 'INFO' | 'WARN' | 'ERROR';
+
 const ChatbotWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -18,11 +25,45 @@ const ChatbotWidget = () => {
   const [isLoading, setIsLoading] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const sessionStateRef = useRef<Record<string, unknown> | null>(null);
+  const sessionIdRef = useRef(
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  );
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+  const logClient = (
+    level: ClientLogLevel,
+    step: string,
+    message: string,
+    requestId?: string,
+    meta?: Record<string, unknown>
+  ) => {
+    const payload = {
+      ts: new Date().toISOString(),
+      level,
+      step,
+      requestId: requestId || 'n/a',
+      message,
+      ...(meta ? { meta } : {}),
+    };
+
+    if (level === 'ERROR') {
+      console.error('[chatbot-client]', payload);
+    } else if (level === 'WARN') {
+      console.warn('[chatbot-client]', payload);
+    } else {
+      console.log('[chatbot-client]', payload);
+    }
+  };
 
   useEffect(() => {
     if (isOpen && messages.length === 0) {
       sessionStateRef.current = null;
+      sessionIdRef.current =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       // Send initial empty message to get greeting
       sendMessage('hola', true);
     }
@@ -41,6 +82,11 @@ const ChatbotWidget = () => {
   const sendMessage = async (text: string, isInit = false) => {
     if (!text.trim() || isLoading) return;
 
+    const requestId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
     if (!isInit) {
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -55,36 +101,102 @@ const ChatbotWidget = () => {
     setIsLoading(true);
 
     try {
+      logClient('INFO', 'request.start', 'Sending request to chatbot edge function', requestId, {
+        isInit,
+        hasSessionState: !!sessionStateRef.current,
+        sessionId: sessionIdRef.current,
+        messageLength: text.trim().length,
+      });
+
+      const conversationMessages: EdgeMessage[] = [
+        ...messages.map((msg) => ({
+          role: msg.sender === 'user' ? 'user' : 'assistant',
+          content: msg.text,
+        })),
+        {
+          role: 'user',
+          content: text.trim(),
+        },
+      ];
+
+      logClient('INFO', 'request.payload_ready', 'Built edge payload', requestId, {
+        messagesCount: conversationMessages.length,
+      });
+
       const response = await fetch(`${supabaseUrl}/functions/v1/chatbot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text.trim(),
-          sessionState: sessionStateRef.current,
+          messages: conversationMessages,
+          sessionId: sessionIdRef.current,
         }),
       });
 
-      const data = await response.json();
+      logClient('INFO', 'request.response', 'Received response from edge function', requestId, {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+      });
+
+      const rawResponseText = await response.text();
+      let data: Record<string, unknown> = {};
+
+      try {
+        data = rawResponseText ? JSON.parse(rawResponseText) : {};
+        logClient('INFO', 'request.parse_response', 'Parsed response JSON successfully', requestId, {
+          keys: Object.keys(data),
+        });
+      } catch (parseError) {
+        logClient('ERROR', 'request.parse_response_failed', 'Failed to parse response JSON', requestId, {
+          rawResponseText,
+          error:
+            parseError instanceof Error
+              ? { name: parseError.name, message: parseError.message, stack: parseError.stack }
+              : { message: String(parseError) },
+        });
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to get response');
+        logClient('ERROR', 'request.failed', 'Edge function returned error response', requestId, {
+          status: response.status,
+          responseData: data,
+        });
+
+        throw new Error(
+          (typeof data.error === 'string' && data.error) ||
+            (typeof data.message === 'string' && data.message) ||
+            `Failed with status ${response.status}`
+        );
       }
 
       // Store session state for next message
-      if (data.sessionState) {
-        sessionStateRef.current = data.sessionState;
+      if (data.sessionState && typeof data.sessionState === 'object') {
+        sessionStateRef.current = data.sessionState as Record<string, unknown>;
       }
+
+      logClient('INFO', 'request.success', 'Edge function call completed successfully', requestId, {
+        hasMessage: typeof data.message === 'string',
+        hasSessionState: !!data.sessionState,
+      });
 
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: data.message || 'Sorry, I could not process your request.',
+        text:
+          (typeof data.message === 'string' && data.message) ||
+          'Sorry, I could not process your request.',
         sender: 'bot',
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, botMessage]);
     } catch (error) {
-      console.error('Error sending message:', error);
+      logClient('ERROR', 'request.exception', 'Unhandled client error while sending message', requestId, {
+        error:
+          error instanceof Error
+            ? { name: error.name, message: error.message, stack: error.stack }
+            : { message: String(error) },
+      });
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: 'Sorry, there was an error. Please try again. / Lo siento, hubo un error. Intenta de nuevo.',
