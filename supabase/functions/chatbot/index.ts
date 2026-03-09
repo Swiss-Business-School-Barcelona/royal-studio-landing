@@ -65,6 +65,15 @@ function serializeError(error: unknown): Record<string, unknown> {
   return { message: String(error) };
 }
 
+function getDateInTimeZone(timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 interface BookingData {
   client_name?: string;
   barber_name?: string;
@@ -77,6 +86,85 @@ interface BookingData {
 interface Message {
   role: "user" | "assistant";
   content: string;
+}
+
+interface AvailabilityCandidate {
+  barberName: string;
+  day: string;
+  time: string;
+}
+
+function addDaysToDate(dateStr: string, days: number): string {
+  const date = new Date(`${dateStr}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().split("T")[0];
+}
+
+function extractAvailabilityCandidate(
+  messages: Message[],
+  today: string
+): AvailabilityCandidate | null {
+  const userMessages = messages.filter((m) => m.role === "user");
+  if (userMessages.length === 0) return null;
+
+  const latestUser = userMessages[userMessages.length - 1]?.content || "";
+  const latestUserLower = latestUser.toLowerCase();
+
+  const timeRegex = /\b([01]?\d|2[0-3]):([0-5]\d)\b/;
+  const dateRegex = /\b(20\d{2}-\d{2}-\d{2})\b/;
+
+  let resolvedTime: string | null = null;
+  let resolvedDate: string | null = null;
+
+  const latestTimeMatch = latestUser.match(timeRegex);
+  if (latestTimeMatch) {
+    const hh = latestTimeMatch[1].padStart(2, "0");
+    const mm = latestTimeMatch[2];
+    resolvedTime = `${hh}:${mm}`;
+  }
+
+  const latestDateMatch = latestUser.match(dateRegex);
+  if (latestDateMatch) {
+    resolvedDate = latestDateMatch[1];
+  } else if (latestUserLower.includes("tomorrow") || latestUserLower.includes("mañana")) {
+    resolvedDate = addDaysToDate(today, 1);
+  }
+
+  // Fallback: find most recent date/time in previous user messages
+  if (!resolvedTime || !resolvedDate) {
+    for (let i = userMessages.length - 1; i >= 0; i--) {
+      const text = userMessages[i].content;
+      const lower = text.toLowerCase();
+
+      if (!resolvedTime) {
+        const t = text.match(timeRegex);
+        if (t) {
+          const hh = t[1].padStart(2, "0");
+          const mm = t[2];
+          resolvedTime = `${hh}:${mm}`;
+        }
+      }
+
+      if (!resolvedDate) {
+        const d = text.match(dateRegex);
+        if (d) {
+          resolvedDate = d[1];
+        } else if (lower.includes("tomorrow") || lower.includes("mañana")) {
+          resolvedDate = addDaysToDate(today, 1);
+        }
+      }
+
+      if (resolvedTime && resolvedDate) break;
+    }
+  }
+
+  if (!resolvedTime || !resolvedDate) return null;
+
+  return {
+    barberName: "Marcelo",
+    day: resolvedDate,
+    time: resolvedTime,
+  };
 }
 
 // Available hours in 30-minute intervals
@@ -109,6 +197,13 @@ async function findAvailableSlots(
       .eq("barber_name", barberName)
       .eq("day", requestedDate)
       .eq("time", requestedTime);
+
+    log?.("INFO", "availability.exact_result", "Exact slot query completed", {
+      existingBookingCount: Array.isArray(exactBooking) ? exactBooking.length : 0,
+      barberName,
+      requestedDate,
+      requestedTime,
+    });
 
     if (!exactBooking || exactBooking.length === 0) {
       log?.("INFO", "availability.exact_check", "Exact slot is available", {
@@ -190,6 +285,67 @@ async function findAvailableSlots(
   }
 }
 
+async function getNearbyAvailableTimes(
+  supabase: any,
+  barberName: string,
+  requestedDate: string,
+  requestedTime: string,
+  limit = 3,
+  log?: ReturnType<typeof createLogger>
+): Promise<string[]> {
+  try {
+    const timeIndex = AVAILABLE_TIMES.indexOf(requestedTime);
+    const timesToTry: string[] = [];
+
+    if (timeIndex !== -1) {
+      for (let offset = 1; offset < AVAILABLE_TIMES.length; offset++) {
+        if (timeIndex - offset >= 0) {
+          timesToTry.push(AVAILABLE_TIMES[timeIndex - offset]);
+        }
+        if (timeIndex + offset < AVAILABLE_TIMES.length) {
+          timesToTry.push(AVAILABLE_TIMES[timeIndex + offset]);
+        }
+      }
+    } else {
+      timesToTry.push(...AVAILABLE_TIMES);
+    }
+
+    const available: string[] = [];
+
+    for (const time of timesToTry) {
+      const { data: booking } = await supabase
+        .from("bookings")
+        .select("id")
+        .eq("barber_name", barberName)
+        .eq("day", requestedDate)
+        .eq("time", time)
+        .limit(1);
+
+      if (!booking || booking.length === 0) {
+        available.push(time);
+      }
+
+      if (available.length >= limit) {
+        break;
+      }
+    }
+
+    log?.("INFO", "availability.nearby_suggestions", "Computed nearby available times", {
+      barberName,
+      requestedDate,
+      requestedTime,
+      suggestions: available,
+    });
+
+    return available;
+  } catch (error) {
+    log?.("ERROR", "availability.nearby_suggestions_error", "Failed computing nearby available times", {
+      error: serializeError(error),
+    });
+    return [];
+  }
+}
+
 serve(async (req: Request) => {
   const requestId = crypto.randomUUID();
   const requestLogger = createLogger(requestId);
@@ -235,8 +391,9 @@ serve(async (req: Request) => {
       );
     }
 
-    // Get today's date for context
-    const today = new Date().toISOString().split('T')[0];
+    // Get today's date for context using shop timezone
+    const shopTimeZone = "Europe/Madrid";
+    const today = getDateInTimeZone(shopTimeZone);
     
     // System prompt for the chatbot - optimized for reservation process
     const systemPrompt = `You are the reservation assistant for Royal Studio, a premium barber shop.
@@ -292,9 +449,14 @@ User: "I want a haircut with Marcelo tomorrow at 15:00"
 Assistant: Ask only for the missing info (name).
 
 User: "John"
-Assistant: Check availability for the requested time.
+Assistant: Ask for phone number and explain that exact availability is verified at final confirmation.
 
-4. Availability check behavior
+4. Availability communication behavior
+
+- Do NOT claim a time is available or booked during chat collection.
+- Say that exact availability is verified by the booking system at final confirmation.
+- If asked directly, use wording like:
+  "I will verify exact availability when I submit the reservation."
 
 When the requested time is available:
 Ask for the phone number before confirming.
@@ -363,6 +525,11 @@ Date Rules:
       ...messages,
     ];
 
+    const hasSupabaseConnection = !!(supabaseUrl && supabaseServiceKey);
+    const supabase = hasSupabaseConnection
+      ? createClient(supabaseUrl as string, supabaseServiceKey as string)
+      : null;
+
     // Call OpenAI API
     log("INFO", "openai.request.start", "Sending request to OpenAI", {
       model: "gpt-4o-mini",
@@ -408,6 +575,65 @@ Date Rules:
     log("INFO", "openai.response.received", "Assistant message received", {
       messageLength: typeof assistantMessage === "string" ? assistantMessage.length : 0,
     });
+
+    // Force DB verification on every request whenever a date/time candidate can be extracted
+    const availabilityCandidate = extractAvailabilityCandidate(conversationMessages, today);
+
+    if (availabilityCandidate && supabase) {
+      log("INFO", "availability.force_check.start", "Forced availability check triggered", {
+        barberName: availabilityCandidate.barberName,
+        day: availabilityCandidate.day,
+        time: availabilityCandidate.time,
+      });
+
+      const { data: existingBooking, error: availabilityError } = await supabase
+        .from("bookings")
+        .select("id")
+        .eq("barber_name", availabilityCandidate.barberName)
+        .eq("day", availabilityCandidate.day)
+        .eq("time", availabilityCandidate.time)
+        .limit(1);
+
+      if (availabilityError) {
+        log("ERROR", "availability.force_check.error", "Forced availability DB check failed", {
+          error: serializeError(availabilityError),
+        });
+      } else {
+        const isBooked = !!existingBooking?.length;
+        log("INFO", "availability.force_check.result", "Forced availability DB check completed", {
+          isBooked,
+          matches: existingBooking?.length || 0,
+          barberName: availabilityCandidate.barberName,
+          day: availabilityCandidate.day,
+          time: availabilityCandidate.time,
+        });
+
+        let dbVerificationNote = "";
+        if (isBooked) {
+          const closestSlot = await findAvailableSlots(
+            supabase,
+            availabilityCandidate.barberName,
+            availabilityCandidate.day,
+            availabilityCandidate.time,
+            log
+          );
+
+          //dbVerificationNote = `⚠️ Verified in database: ${availabilityCandidate.barberName} is already booked on ${availabilityCandidate.day} at ${availabilityCandidate.time}.`;
+          if (closestSlot) {
+            dbVerificationNote += ` Closest available slot: ${closestSlot.date} at ${closestSlot.slot}.`;
+          }
+        } else {
+         // dbVerificationNote = `✅ Verified in database: ${availabilityCandidate.barberName} is available on ${availabilityCandidate.day} at ${availabilityCandidate.time}.`;
+        }
+
+        assistantMessage = `${dbVerificationNote}\n\n${assistantMessage}`;
+      }
+    } else if (availabilityCandidate && !supabase) {
+      log("WARN", "availability.force_check.skipped", "Forced DB check skipped due to missing Supabase configuration", {
+        hasSupabaseUrl: !!supabaseUrl,
+        hasSupabaseServiceKey: !!supabaseServiceKey,
+      });
+    }
 
     // Check if reservation should be confirmed
     if (assistantMessage.includes("RESERVATION_CONFIRMED:")) {
@@ -455,32 +681,34 @@ Date Rules:
 
         // Initialize Supabase client with service role key
         log("INFO", "supabase.client_init", "Initializing Supabase client");
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const bookingSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
         try {
-          // Find available slot (exact time or alternatives)
-          log("INFO", "availability.start", "Checking slot availability", {
+          // Check exact requested slot only (do not auto-book alternatives)
+          log("INFO", "availability.start", "Checking exact requested slot before booking", {
             barber: barberName.trim(),
             date: day.trim(),
             time: time.trim(),
           });
 
-          const availableSlot = await findAvailableSlots(
-            supabase,
-            barberName.trim(),
-            day.trim(),
-            time.trim(),
-            log
-          );
+          const { data: exactBooking, error: exactBookingError } = await bookingSupabase
+            .from("bookings")
+            .select("id")
+            .eq("barber_name", barberName.trim())
+            .eq("day", day.trim())
+            .eq("time", time.trim())
+            .limit(1);
 
-          if (!availableSlot) {
-            log("WARN", "availability.none", "No available slots found");
+          if (exactBookingError) {
+            log("ERROR", "availability.exact_query_error", "Failed checking exact slot before booking", {
+              error: serializeError(exactBookingError),
+            });
             assistantMessage = assistantMessage
               .split("RESERVATION_CONFIRMED:")[0]
               .trim();
             return new Response(
               JSON.stringify({
-                message: assistantMessage || `Unfortunately, there are no available slots with ${barberName.trim()} around that time. Would you like to try a different date or time?`,
+                message: assistantMessage || "I couldn't verify availability right now. Please try again.",
               }),
               {
                 status: 200,
@@ -489,23 +717,58 @@ Date Rules:
             );
           }
 
-          // If different from requested, inform user
-          const slotsAreDifferent =
-            availableSlot.slot !== time.trim() ||
-            availableSlot.date !== day.trim();
+          const isRequestedSlotBooked = Array.isArray(exactBooking) && exactBooking.length > 0;
+
+          if (isRequestedSlotBooked) {
+            const nearbyTimes = await getNearbyAvailableTimes(
+              bookingSupabase,
+              barberName.trim(),
+              day.trim(),
+              time.trim(),
+              3,
+              log
+            );
+
+            log("WARN", "availability.requested_slot_booked", "Requested slot is already booked", {
+              barber: barberName.trim(),
+              date: day.trim(),
+              time: time.trim(),
+              nearbyTimes,
+            });
+
+            assistantMessage = assistantMessage
+              .split("RESERVATION_CONFIRMED:")[0]
+              .trim();
+
+            const suggestionBlock = nearbyTimes.length
+              ? nearbyTimes.join("\n")
+              : "(no nearby times available right now)";
+
+            return new Response(
+              JSON.stringify({
+                message:
+                  assistantMessage ||
+                  `${barberName.trim()} is booked at ${time.trim()}, but these times are available:\n${suggestionBlock}\nWould any of these work?`,
+              }),
+              {
+                status: 200,
+                headers: withCorsHeaders({ "Content-Type": "application/json" }),
+              }
+            );
+          }
 
           // Insert booking
           log("INFO", "booking.insert.start", "Inserting booking into database", {
-            date: availableSlot.date,
-            time: availableSlot.slot,
+            date: day.trim(),
+            time: time.trim(),
           });
 
-          const { data: insertData, error: insertError } = await supabase.from("bookings").insert([
+          const { data: insertData, error: insertError } = await bookingSupabase.from("bookings").insert([
             {
               client_name: clientName.trim(),
               barber_name: barberName.trim(),
-              day: availableSlot.date,
-              time: availableSlot.slot,
+              day: day.trim(),
+              time: time.trim(),
               phone_number: phoneNumber.trim(),
               notes: notes.trim() || null,
             },
@@ -548,7 +811,7 @@ Date Rules:
 
           log("INFO", "booking.insert.success", "Reservation inserted successfully", {
             insertCount: Array.isArray(insertData) ? insertData.length : 0,
-            usedAlternativeSlot: slotsAreDifferent,
+            usedAlternativeSlot: false,
           });
 
           // Remove the confirmation marker and return clean message
@@ -556,19 +819,14 @@ Date Rules:
             .split("RESERVATION_CONFIRMED:")[0]
             .trim();
 
-          // Add information about alternative slot if needed
-          if (slotsAreDifferent) {
-            cleanMessage += `\n\nNote: We've booked you for ${availableSlot.slot} on ${availableSlot.date} as that was the closest available time.`;
-          }
-
           return new Response(
             JSON.stringify({
               message: cleanMessage || "Your reservation has been confirmed! Thank you for choosing Royal Studio.",
               booking: {
                 client_name: clientName.trim(),
                 barber_name: barberName.trim(),
-                day: availableSlot.date,
-                time: availableSlot.slot,
+                day: day.trim(),
+                time: time.trim(),
                 phone_number: phoneNumber.trim(),
                 notes: notes.trim() || null,
               },
