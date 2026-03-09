@@ -1,12 +1,18 @@
-name: keep-supabase-awake
+name: Keep Supabase Alive
 
+# Run every 3 days
 on:
   schedule:
-    - cron: "0 0 */3 * *"
+    - cron: "0 0 */3 * *" # Every 3 days at midnight UTC
+  workflow_dispatch: # Optional: allows manual trigger
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase
-        run: curl https://rwodjtqcqpfiefteyors.supabase.co/rest/v1/
+      - name: Call Supabase function
+        run: |
+          curl -X POST "https://rwodjtqcqpfiefteyors.supabase.co/functions/v1/chatbot" \
+          -H "apikey: sb_publishable_RIZExz4E0XwDOmrwOgoKXw_LkVf-XFe" \
+          -H "Content-Type: application/json" \
+          -d '{"ping":"keep-alive"}'
